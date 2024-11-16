@@ -1,0 +1,1778 @@
+#### 质控
+for i `cut -f1  /project/meta-seq/mapping_file.txt`;
+do
+for j in 1 2;
+do
+mkdir -p /project/meta-seq/data_analysis/evaluation/fastqc/${i} && \
+fastqc --extract --nogroup --kmers 8 --threads 16 \
+    /project/meta-seq/raw_data/${i}_${j}.fq.gz \
+    -o /project/meta-seq/data_analysis/evaluation/fastqc/${i} ;
+/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../binaries/fastx-utils fqchk -q 33 /project/meta-seq/raw_data/${i}_${j}.fq.gz \
+    >/project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.txt ;
+/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../utils/fqchk_base.R /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.txt \
+    /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.base.pdf ${i}.R${j} ;
+/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../utils/fqchk_qual.R /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.txt \
+    /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.qual.pdf ${i}.R${j} ;
+/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../utils/pdf2png /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.base.pdf ;
+/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../utils/pdf2png /project/meta-seq/data_analysis/evaluation/fqchk/${i}.R${j}.qual.pdf ;
+done
+done
+
+cut -f1  /project/meta-seq/mapping_file.txt  | \
+    grep -v "#" | \
+    perl -ane 'print qq{java -jar /biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../thirdpart/Trimmomatic/trimmomatic.jar PE -threads 16 -phred33 /project/meta-seq/raw_data/$F[0]_1.fq.gz  /project/meta-seq/raw_data/$F[0]_2.fq.gz /project/meta-seq/data_analysis/trimming/reads/$F[0].R1.fastq /project/meta-seq/data_analysis/trimming/reads/$F[0].R1_singleton.fastq /project/meta-seq/data_analysis/trimming/reads/$F[0].R2.fastq /project/meta-seq/data_analysis/trimming/reads/$F[0].R2_singleton.fastq ILLUMINACLIP:/biostack/tools/protocols/meta-seq-0.0.2/bins/qc/../../thirdpart/Trimmomatic/adapters/NexteraPE_TruSeq3-PE-2.fa:2:30:10 SLIDINGWINDOW:4:15 LEADING:3  TRAILING:3  MINLEN:36 ;\n}' | \
+    bash
+
+
+##### 组装
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+spades.py --meta -m  480 -t  48 -o  /data/yr/data_analysis/assembly/metaspades/${i} -k 21,33,55,77 -1  /data/yr/data_analysis/trimming/reads/${i}.R1.fastq -2  /data
+/yr/data_analysis/trimming/reads/${i}.R2.fastq ;
+/biostack/tools/protocols/meta-seq-0.0.3/bins/assembly/../../binaries/seqtk seq
+-L 200 /data/yr/data_analysis/assembly/metaspades/G1/scaffolds.fasta |/biostack/
+tools/protocols/meta-seq-0.0.3/bins/assembly/../../binaries/seqtk rename - ${i} >
+/data/yr/data_analysis/assembly/contigs/${i}.fasta ;
+done
+
+### metaspades需要合并序列，挺少的不用写循环
+
+cat /data/yr/data_analysis/trimming/reads/G1_R1.fastq /data/yr/data_analysis/trimming/reads/G3_R1.fastq /data/yr/data_analysis/trimming/reads/G4_R1.fastq /data/yr/data_analysis/trimming/reads/G6_R1.fastq >> /data/yr/virus/cat_cleanreads/Gall.1.fq
+
+cat /data/yr/data_analysis/trimming/reads/G1_R2.fastq /data/yr/data_analysis/trimming/reads/G3_R2.fastq /data/yr/data_analysis/trimming/reads/G4_R2.fastq /data/yr/data_analysis/trimming/reads/G6_R2.fastq >> /data/yr/virus/cat_cleanreads/Gall.2.fq
+
+nohup spades.py --meta -m 1850 -t 185 -o /data/yr/virus/metaspades/G -k 21,33,55,77,99,127 -1 /data/yr/virus/cat_cleanreads/Gall.1.fq -2 /data/yr/virus/cat_cleanreads/Gall.2.fq &
+
+cat /data/yr/data_analysis/trimming/reads/W1_R1.fastq /data/yr/data_analysis/trimming/reads/W2_R1.fastq /data/yr/data_analysis/trimming/reads/W5_R1.fastq /data/yr/data_analysis/trimming/reads/W6_R1.fastq >> /data/yr/virus/cat_cleanreads/Wall.1.fq
+
+cat /data/yr/data_analysis/trimming/reads/W1_R2.fastq /data/yr/data_analysis/trimming/reads/W2_R2.fastq /data/yr/data_analysis/trimming/reads/W5_R2.fastq /data/yr/data_analysis/trimming/reads/W6_R2.fastq >> /data/yr/virus/cat_cleanreads/Wall.2.fq
+
+nohup spades.py --meta -m 1800 -t 180 -o /data/yr/virus/metaspades/all -k 21,33,55,77,99,127 -1 /data/yr/virus/cat_cleanreads/GWall.1.fq -2 /data/yr/virus/cat_cleanreads/GWall.2.fq &
+
+cat Gall.1.fq Wall.1.fq >> GWall.1.fq
+
+cat Gall.1.fq Wall.1.fq >> GWall.2.fq
+
+rm Gall.1.fq Wall.1.fq Gall.1.fq Wall.1.fq
+
+nohup spades.py --meta -m 1800 -t 180 -o /data/yr/virus/metaspades/all -k 21,33,55,77,99,127 -1 /data/yr/virus/cat_cleanreads/GWall.1.fq -2 /data/yr/virus/cat_cleanreads/GWall.2.fq &
+
+nohup spades.py --meta -m 1200 -t 120 -o /data/yr/virus/metaspades/all -k 21,33,55,77,99,127 -1 /data/yr/virus/cat_cleanreads/GWall.1.fq -2 /data/yr/virus/cat_cleanreads/GWall.2.fq &
+
+#### 确定病毒序列
+
+### 1.vibrant
+
+##### 1.安装
+
+使用时保证以下软件均安装成功软件：Python3 >= 3.5(BioPython、Pandas、Matplotlib、Seaborn(version >= 0.9.0)、Numpy(version >= 1.17.0)、Scikit-learn(version == 0.21.3)、Pickle)，Prodigal、HMMER3、gzip、tar、wget
+
+##### 以上的依赖安装好后安装vibrant并下载数据库
+
+在安装包下载地址：<https://github.com/AnantharamanLab/VIBRANT/>
+conda install -c bioconda vibrant==1.2.0
+download-db.sh
+
+### 检测是数据库是否装好
+
+cd VIBRANT-master/databases
+./VIBRANT_setup.py -test
+
+![image.png](https://note.youdao.com/yws/res/82373/WEBRESOURCE157b2d974528e6df88781ff695f52c53)
+
+#### 运行路径 /data/yr/virus/virus_contigs/G1
+
+mkdir -p /data/yr/virus/virus_contigs/G1
+cd /data/yr/virus/virus_contigs/G1
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/data_analysis/assembly/contigs/G1.fasta -t 60
+
+### 使用vibrant鉴定出来的所有病毒序列/data/yr/virus/virus_contigs/G1/VIBRANT_G1/VIBRANT_phages_G1/G1.phages_combined.fna
+
+### 病毒序列，包含完整的病毒、裂解病毒、温和病毒，其他的3种分类在/data/yr/virus/virus_contigs/G1/VIBRANT_G1/VIBRANT_phages_G1/中都有
+
+/data/yr/virus/virus_contigs/G1/VIBRANT_G1/VIBRANT_phages_G1/G1.phages_combined.fna
+
+#### 2.VirSorter2
+
+mkdir -p /data/yr/virus/virus_contigs/G1/VirSorter2_G1
+
+virsorter run -w /data/yr/virus/virus_contigs/G1/VirSorter2_G1/G1.out -i /data/yr/virus/virus_contigs/G1/VIBRANT_G1/VIBRANT_phages_G1/G1.phages_combined.fna --min-length 1500 -j 70 all
+
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir -p /data/yr/virus/virus_contigs/`${i}
+cd /data/yr/virus/virus_contigs/$`{i}
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/data_analysis/assembly/contigs/`${i}.fasta -t 60 
+mkdir -p /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}
+cd /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}
+virsorter run -w /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}/$`{i}.out -i /data/yr/virus/virus_contigs/`${i}/VIBRANT_$`{i}/VIBRANT_phages_`${i}/$`{i}.phages_combined.fna --min-length 1500 -j 70 all;
+done
+
+##### 3.vRhyme
+
+### 安装
+
+conda create -c bioconda -n vRhyme python=3 samtools mash mummer mmseqs2 prodigal bowtie2 bwa
+conda activate vRhyme
+pip install . -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+#### 查看是否安装好
+
+vRhyme -h
+
+#### 安装2
+
+git clone <https://github.com/AnantharamanLab/vRhyme>
+cd vRhyme
+gunzip vRhyme/models/vRhyme_machine_model_ET.sav.gz
+conda create -c bioconda -n vRhyme python=3 networkx pandas numpy numba scikit-learn pysam samtools mash mummer mmseqs2 prodigal bowtie2 bwa
+conda activate vRhyme
+pip install . -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+#### 计算contigs的coverage
+
+mkdir -p /data/yr/virus/virus_contigs/G1/coverage_G1
+cp /data/yr/virus/virus_contigs/G1/VirSorter2_G1/G1.out/final-viral-combined.fa /data/yr/virus/virus_contigs/G1/coverage_G1
+
+### 构建索引
+
+cd /data/yr/virus/virus_contigs/G1/coverage_G1
+bowtie2-build 
+-f /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa
+
+### 生成sam文件
+
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/G1/G1_1.fastq 
+-2 /data/yr/data_analysis/concoct/G1/G1_2.fastq 
+-S /data/yr/virus/virus_contigs/G1/coverage_G1/G1.sam 
+-p 70
+
+### 转化bam文件
+
+samtools view -h -b -S /data/yr/virus/virus_contigs/G1/coverage_G1/G1.sam -o /data/yr/virus/virus_contigs/G1/coverage_G1/G1.bam -@ 70;
+samtools view -b -F 4 /data/yr/virus/virus_contigs/G1/coverage_G1/G1.bam -o /data/yr/virus/virus_contigs/G1/coverage_G1/G1.mapped.bam -@ 70;
+samtools sort /data/yr/virus/virus_contigs/G1/coverage_G1/G1.mapped.bam -o /data/yr/virus/virus_contigs/G1/coverage_G1/G1.mapped.sorted.bam -@ 70;
+
+#### vRhyme
+
+mkdir -p /data/yr/virus/virus_contigs/G1/vRhyme_G1
+mkdir -p /data/yr/virus/virus_contigs/G1/vRhyme_G1/bam
+cp /data/yr/virus/virus_contigs/G1/coverage_G1/G1.mapped.sorted.bam  /data/yr/virus/virus_contigs/G1/vRhyme_G1/bam
+
+cd /data/yr/virus/virus_contigs/G1/vRhyme_G1
+vRhyme -i /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa -t 1 -b /data/yr/virus/virus_contigs/G1/coverage_G1/G1.mapped.sorted.bam -o /data/yr/virus/virus_contigs/G1/vRhyme_G1/output;
+
+mkdir -p /data/yr/virus/virus_contigs/G1
+cd /data/yr/virus/virus_contigs/G1
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/data_analysis/assembly/contigs/G1.fasta -t 60
+
+
+#### /data/yr/virus/virus_contigs/G1/1.sh
+
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir -p /data/yr/virus/virus_contigs/`${i}
+cd /data/yr/virus/virus_contigs/$`{i}
+conda activate /project/hz/miniconda2/envs/VIBRANT
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/data_analysis/assembly/contigs/`${i}.fasta -t 60 
+mkdir -p /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}
+cd /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}
+conda activate vs2
+virsorter run -w /data/yr/virus/virus_contigs/$`{i}/VirSorter2_`${i}/$`{i}.out -i /data/yr/virus/virus_contigs/`${i}/VIBRANT_$`{i}/VIBRANT_phages_`${i}/$`{i}.phages_combined.fna --min-length 1500 -j 70 all;
+done
+
+conda activate /project/hz/miniconda2/envs/vRhyme
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir -p /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}
+cp /data/yr/virus/virus_contigs/`${i}/VirSorter2_$`{i}/`${i}.out/final-viral-combined.fa /data/yr/virus/virus_contigs/$`{i}/coverage_${i}
+
+cd /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}
+bowtie2-build 
+-f /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/final-viral-combined.fa /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/final-viral-combined.fa
+done
+
+####这一步识别不出来${i}，只能分步做
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/G3/coverage_G3/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/G3/G3_1.fastq 
+-2 /data/yr/data_analysis/concoct/G3/G3_2.fastq 
+-S /data/yr/virus/virus_contigs/G3/coverage_G3/G3.sam 
+-p 10
+
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/G4/coverage_G4/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/G4/G4_1.fastq 
+-2 /data/yr/data_analysis/concoct/G4/G4_2.fastq 
+-S /data/yr/virus/virus_contigs/G4/coverage_G4/G4.sam 
+-p 10
+
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/G6/coverage_G6/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/G6/G6_1.fastq 
+-2 /data/yr/data_analysis/concoct/G6/G6_2.fastq 
+-S /data/yr/virus/virus_contigs/G6/coverage_G6/G6.sam 
+-p 10
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/W1/coverage_W1/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/W1/W1_1.fastq 
+-2 /data/yr/data_analysis/concoct/W1/W1_2.fastq 
+-S /data/yr/virus/virus_contigs/W1/coverage_W1/W1.sam 
+-p 10
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/W2/coverage_W2/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/W2/W2_1.fastq 
+-2 /data/yr/data_analysis/concoct/W2/W2_2.fastq 
+-S /data/yr/virus/virus_contigs/W2/coverage_W2/W2.sam 
+-p 10
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/W5/coverage_W5/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/W5/W5_1.fastq 
+-2 /data/yr/data_analysis/concoct/W5/W5_2.fastq 
+-S /data/yr/virus/virus_contigs/W5/coverage_W5/W5.sam 
+-p 10
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+bowtie2 -q --fr 
+-x /data/yr/virus/virus_contigs/W6/coverage_W6/final-viral-combined.fa 
+-1 /data/yr/data_analysis/concoct/W6/W6_1.fastq 
+-2 /data/yr/data_analysis/concoct/W6/W6_2.fastq 
+-S /data/yr/virus/virus_contigs/W6/coverage_W6/W6.sam 
+-p 10
+
+### sam转bam,并分箱
+
+conda activate /project/hz/miniconda2/envs/vRhyme
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+samtools view -h -b -S /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/`${i}.sam -o /data/yr/virus/virus_contigs/$`{i}/coverage_`${i}/$`{i}.bam -@ 70;
+samtools view -b -F 4 /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/`${i}.bam -o /data/yr/virus/virus_contigs/$`{i}/coverage_`${i}/$`{i}.mapped.bam -@ 70;
+samtools sort /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/`${i}.mapped.bam -o /data/yr/virus/virus_contigs/$`{i}/coverage_`${i}/$`{i}.mapped.sorted.bam -@ 70;
+mkdir -p /data/yr/virus/virus_contigs/`${i}/vRhyme_$`{i};
+cd /data/yr/virus/virus_contigs/`${i}/vRhyme_$`{i};
+vRhyme -i /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/final-viral-combined.fa -t 70 -b /data/yr/virus/virus_contigs/`${i}/coverage_$`{i}/`${i}.mapped.sorted.bam -o /data/yr/virus/virus_contigs/$`{i}/vRhyme_${i}/output;
+done
+
+#### 将所votu以及contigs和vMAG合在一起去冗余
+
+mkdir -p /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG;
+cp /data/yr/virus/virus_contigs/G1/vRhyme_G1/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG;
+cd /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG;
+for i in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${i}.fasta >> /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/G1_all_vMAGs.fasta;
+done
+
+cat /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/G1_all_vMAGs.fasta /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG_vOTU_G1.fa;
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG_vOTU_G1.fa 
+-o /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/cd_hit_vMAG_vOTU_G1.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+### 循环
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir -p /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+cp /data/yr/virus/virus_contigs/`${i}/vRhyme_$`{i}/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+cd /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat `${j}.fasta >> /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/$`{i}*all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/`${i}_all_vMAGs.fasta /data/yr/virus/virus_contigs/$`{i}/coverage*`${i}/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/vMAG_vOTU_$`{i}.fa;
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG_vOTU_`${i}.fa          -o /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/cd_hit_vMAG_vOTU_$`{i}.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+done
+done
+
+mkdir -p /data/yr/virus/virus_contigs/G/vMAG_vOTU_G1/vMAG;
+cp /data/yr/virus/virus_contigs/G1/vRhyme_G1/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG;
+cd /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG;
+for i in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${i}.fasta >> /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/G1_all_vMAGs.fasta;
+done
+
+cat /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/G1_all_vMAGs.fasta /data/yr/virus/virus_contigs/G1/coverage_G1/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/G1/vMAG_vOTU_G1/vMAG_vOTU_G1.fa;
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir -p /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+cp /data/yr/virus/virus_contigs/`${i}/vRhyme_$`{i}/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+cd /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat `${j}.fasta >> /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/$`{i}*all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/`${i}_all_vMAGs.fasta /data/yr/virus/virus_contigs/$`{i}/coverage*`${i}/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/vMAG_vOTU_$`{i}.fa;
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/vMAG_vOTU_`${i}.fa          -o /data/yr/virus/virus_contigs/$`{i}/vMAG_vOTU_`${i}/cd_hit_vMAG_vOTU_$`{i}.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+done
+done
+
+mkdir -p /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+cp /data/yr/virus/virus_contigs/G6/vRhyme_G6/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+cd /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/G6_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/G6_all_vMAGs.fasta /data/yr/virus/virus_contigs/G6/coverage_G6/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG_vOTU_G6.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG_vOTU_G6.fa 
+-o /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/cd_hit_vMAG_vOTU_G6.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+mkdir -p /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/vMAG;
+cp /data/yr/virus/virus_contigs/G4/vRhyme_G4/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/vMAG;
+cd /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/G4_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/G4_all_vMAGs.fasta /data/yr/virus/virus_contigs/G4/coverage_G4/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/vMAG_vOTU_G4.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/vMAG_vOTU_G4.fa 
+-o /data/yr/virus/virus_contigs/G4/vMAG_vOTU_G4/cd_hit_vMAG_vOTU_G4.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+mkdir -p /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+cp /data/yr/virus/virus_contigs/G6/vRhyme_G6/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+cd /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/G6_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/G6_all_vMAGs.fasta /data/yr/virus/virus_contigs/G6/coverage_G6/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG_vOTU_G6.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/vMAG_vOTU_G6.fa 
+-o /data/yr/virus/virus_contigs/G6/vMAG_vOTU_G6/cd_hit_vMAG_vOTU_G6.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+mkdir -p /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/vMAG;
+cp /data/yr/virus/virus_contigs/W1/vRhyme_W1/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/vMAG;
+cd /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/W1_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/W1_all_vMAGs.fasta /data/yr/virus/virus_contigs/W1/coverage_W1/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/vMAG_vOTU_W1.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/vMAG_vOTU_W1.fa 
+-o /data/yr/virus/virus_contigs/W1/vMAG_vOTU_W1/cd_hit_vMAG_vOTU_W1.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+mkdir -p /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/vMAG;
+cp /data/yr/virus/virus_contigs/W2/vRhyme_W2/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/vMAG;
+cd /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/W2_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/W2_all_vMAGs.fasta /data/yr/virus/virus_contigs/W2/coverage_W2/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/vMAG_vOTU_W2.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/vMAG_vOTU_W2.fa 
+-o /data/yr/virus/virus_contigs/W2/vMAG_vOTU_W2/cd_hit_vMAG_vOTU_W2.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+### W2 W5 W6
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+mkdir -p /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/vMAG;
+cp /data/yr/virus/virus_contigs/W5/vRhyme_W5/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/vMAG;
+cd /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/W5_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/W5_all_vMAGs.fasta /data/yr/virus/virus_contigs/W5/coverage_W5/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/vMAG_vOTU_W5.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/vMAG_vOTU_W5.fa 
+-o /data/yr/virus/virus_contigs/W5/vMAG_vOTU_W5/cd_hit_vMAG_vOTU_W5.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+biostack
+conda activate /project/hz/miniconda2/envs/vRhyme
+mkdir -p /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/vMAG;
+cp /data/yr/virus/virus_contigs/W6/vRhyme_W6/output/vRhyme_best_bins_fasta/*.fasta /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/vMAG;
+cd /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/vMAG;
+for j in `ls *.fasta | sed 's/.fasta//g' - ` ;
+do
+cat ${j}.fasta >> /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/W6_all_vMAGs.fasta;
+cat /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/W6_all_vMAGs.fasta /data/yr/virus/virus_contigs/W6/coverage_W6/final-viral-combined.fa  >> /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/vMAG_vOTU_W6.fa;
+done
+
+time cd-hit-est -i /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/vMAG_vOTU_W6.fa 
+-o /data/yr/virus/virus_contigs/W6/vMAG_vOTU_W6/cd_hit_vMAG_vOTU_W6.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+mkdir -p /data/yr/virus/virus_contigs/all/votu
+for i in  G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cat /data/yr/virus/virus_contigs/`${i}/vMAG_vOTU_$`{i}/cd_hit_vMAG_vOTU_${i}.fa >> /data/yr/virus/virus_contigs/all/votu/votu_all.fa;
+done
+cd /data/yr/virus/virus_contigs/all/votu/;
+time cd-hit-est -i /data/yr/virus/virus_contigs/all/votu/votu_all.fa 
+-o /data/yr/virus/virus_contigs/all/votu/cd_hit_votu_all.fa  
+-aS 0.9 -c 0.95 -G 0 -g 0 -T 0 -M 0 ;
+
+#### 筛选序列大于5000bp
+
+seqkit seq -m 5000 /data/yr/virus/virus_contigs/all/votu/cd_hit_votu_all.fa | grep ">" -| wc -l
+
+#### votu运行
+
+### virsorter2建议，先用0.5阈值，之后用checv质量检测，得到高质量votu。出一般来说，得分>0.9的人是高度自信的。得分在0.5和0.9之间的可能是病毒和非病毒的混合物。很难找到分离病毒和非病毒的最佳分数，因为它取决于宿主序列和未知序列的%。因此，我们建议使用最大灵敏度的默认截止值（0.5），然后使用checkV应用质量检查步骤以消除误报（而不是预测完整性）。这是沙利文实验室的病毒鉴定SOP。
+
+#### /data/yr/virus/virus_contigs/all/votu
+
+conda activate vs2
+virsorter run -w /data/yr/virus/virus_contigs/all/votu_all.out -i /data/yr/virus/virus_contigs/all/votu/cd_hit_votu_all.fa --min-length 1500 -j 70 all
+
+#### checkv计算大于0.9,运行路径/data/yr/virus/virus_contigs/all/checkv_out
+
+### conda环境vs2
+
+mkdir /data/yr/virus/virus_contigs/all/checkv_out;
+cd /data/yr/virus/virus_contigs/all/checkv_out;
+checkv end_to_end /data/yr/virus/virus_contigs/all/votu/cd_hit_votu_all.fa checkv -t 70 -d /project/hz/checkv_db/checkv-db-v1.4
+
+#### 最终，筛选VirSorter2>0.5,且checkv>0.9的
+
+砧穗互作对根际活性细菌物种种类、丰富度及其功能潜力的影响
+
+mkdir -p /data/yr/virus/virus_contigs/all/votu/VIBRANT;
+cd /data/yr/virus/virus_contigs/all/votu/VIBRANT;
+conda activate /project/hz/miniconda2/envs/VIBRANT;
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/virus/virus_contigs/all/votu/cd_hit_votu_all.fa -t 80
+
+#### 安装SOP模块化来鉴别病毒
+
+conda create -n viral-id-sop virsorter=2 checkv dram
+conda activate viral-id-sop
+mkdir -p /data/viral-id-sop;
+cd /data/viral-id-sop
+
+#### 分开安装checkv，安装于vs2环境下
+
+conda install -c conda-forge -c bioconda checkv
+mkdir /project/hz/checkv_db;
+cd /project/hz/checkv_db;
+
+#### 配置数据库
+
+checkv download_database ./
+export CHECKVDB=/project/hz/checkv_db/checkv-db-v1.4
+
+### 运行
+
+checkv end_to_end input_file.fna output_directory -t 16
+
+##### 安装DRAM
+
+mkdir -p /project/hz/DRAM;
+cd /project/hz/DRAM;
+conda env create -f environment.yaml -n DRAM
+
+## 激活环境
+
+conda activate DRAM
+
+#### 上述conda一直安装失败，使用pip
+
+#### pip 安装，在vs2的conda环境下
+
+mkdir -p /data/DRAM;
+cd /data/DRAM;
+git clone <https://github.com/WrightonLabCSU/DRAM.git>
+cd DRAM
+pip3 install ./ -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+pip install DRAM-bio  -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+#### 配置dram数据库
+
+mkdir -p /data/DRAM/DRAM_db;
+cd /data/DRAM/DRAM_db;
+nohup DRAM-setup.py prepare_databases --output_dir DRAM_data &
+
+#### 安装vcontact2在conda的vs2环境下
+
+##### 安装路径：/project/hz/vConTACT2
+
+##### 为了避免依赖冲突，单独安装环境，vcontact2最好指定python=3.7
+
+conda create --name vContact3.7 python=3.7
+
+### 删除conda remove -n vContact2 --all
+
+#### 激活环境
+
+conda activate vContact2
+
+### 安装依赖项
+
+conda install -y -c bioconda vcontact2
+conda install -y -c bioconda mcl blast diamond
+wget <http://www.paccanarolab.org/static_content/clusterone/cluster_one-1.0.jar>
+cp cluster_one-1.0.jar $HOME/conda/bin/
+
+tar xvf MAVERICLab-vcontact2-c0413a6c92e8.tar.gz
+
+cd MAVERICLab-vcontact2-c0413a6c92e8 && pip install . -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+pip install . --prefix=/project/hz/.conda/envs/vContact2/bin -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+cp cluster_one-1.0.jar ~/.conda/envs/vContact3.7/bin
+
+rm ~/.conda/envs/vContact2/bin/cluster_one-1.0.jar
+
+pip install numpy -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+#### 使用方式
+
+vcontact2 --raw-proteins [proteins file] --rel-mode ‘Diamond’ --proteins-fp [gene-to-genome mapping file] --db 'ProkaryoticViralRefSeq94-Merged' --pcs-mode MCL --vcs-mode ClusterONE --c1-bin [path to ClusterONE] --output-dir [target output directory]
+
+pip install ncbi-genome-download -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+ncbi-genome-download viral --parallel 30
+
+#### Vmatch
+
+wget -c <http://www.vmatch.de/distributions/vmatch-2.3.0-Linux_x86_64-64bit.tar.gz>
+
+#### 使用
+
+#### 未完成：
+
+### 1.checkv选择高质量votu，最终确定votu.fa；
+
+### 2.coverm定量
+
+### 3.病毒物种库设置与注释
+
+### 4.dram注释amg,找潜在功能
+
+### 5.识别宿主
+
+### 6.与细菌联系一下，1.看组成，2.看功能
+
+图1 16s物种组成，以及差异，共有特有otu等(柱状图，网络节点，veen花瓣图)
+
+图2 细菌通路富集情况(kegg为主)一个通路，一个symbol，与根系分泌物关联(热图、气泡图，流动图等)
+
+图3 病毒嫁接自根物种组成，dram注释amg,找辅助基因(kegg为主)，这些amg是否增为群落加了功能？(气泡图，流动图)
+
+图4 找病毒宿主关系,寻找嫁接、未嫁接病毒侵染宿主细菌的某种模式
+
+图5 模式图
+
+##### 物种注释
+
+使用两种方法对vOTU进行分类。其中一个是vConTACT2 v0.9.19[58]使用“原核病毒RefSeq94合并”数据库进行的基因共享网络分析。另一种是基于基因分类的方法，使用blastp v2.9.0根据NCBI RefSeq病毒数据库搜索每个vOTU的ORF+[59]（e值≤10−5和钻头得分≥50），然后通过多数规则方法（超过一半）[60]和最低共同祖先（LCA）算法识别该病毒的分类。由于这两种方法之间没有冲突的分类分配，我们结合了每种方法的所有结果（表S3）。
+
+#### cell
+
+病毒分类对于每个病毒群体，使用Prodigal（Hyatt等人，2010）调用ORF，所得蛋白序列用作vConTACT2（Jang等人，2019）和blastp的输入。使用vConTACT2，以>10kb的重叠群为代表的病毒群体与Viral RefSeq发布的85个病毒基因组聚类。基于基于菱形（Buchfink等人，2015）比对的氨基酸同源性，与来自RefSeq的病毒聚类的那些能够被分配到已知的病毒分类属和家族。对于无法分配分类法或< 10kb的GOV 2.0病毒种群，使用多数规则方法分配家族级分类法，其中如果基因组中超过50%的蛋白质使用blastp位得分分配给同一病毒家族≥ 50与病毒RefSeq病毒，它被认为是该病毒家族的一部分。
+
+病毒种群边界为了确定我们的病毒种群是否具有离散的序列边界，GOV 2.0数据集（不包括使用TOPC文库制备方法和DNA SMART ChIP Seq试剂盒制备的文库制备的Tara站68、78、111、137）中的所有读数被合并，并使用bowtie2中的“非常敏感的局部”设置非确定性地映射到我们的病毒群体中（Langmead和Salzberg，2012）。每个映射读取的核苷酸同一性百分比（%ID）以及确定读取映射的基因组位置。特定%ID处的读取映射频率根据基因组中每个读取映射的长度进行加权。使用黄土平滑函数对特定%ID处的读取映射频率进行平滑（span=1，以更允许较低%ID读取），以创建读取频率直方图（%ID与频率）。为了确定不同%ID之间读取频率分布的中断，在%ID频率之间计算欧几里得距离，然后在R中分层聚类。
+
+计算病毒种群相对丰度、平均读取深度和种群等级为了计算每个样本中不同病毒种群的相对丰度，首先使用bowtie2(<https://github.com/ecogenomics/BamM)使用bedtools> genomecov（Quinlan和Hall，2010）来确定每个基因组中有多少位置被读取所覆盖，并使用自定义Perl脚本来进一步过滤出在重叠群长度上没有足够覆盖的重叠群。对于下游宏观多样性计算≥ 移除长度小于5kb且覆盖范围小于5kb或小于覆盖范围小于5kmb的重叠群的总长度的5kb。对于下游微分散性计算，移除了所有覆盖率低于70%的重叠群。BamM用于计算每个重叠组的平均读取深度（“pmean”-减去顶部和底部10%的深度）。对于宏多样性计算，平均读取深度被用作丰度的代表，并通过每个元基因组的总读取数进行归一化，以允许样本间比较。使用BiodiversityR R包中的标准化丰度和“rankabandance”计算所有病毒种群的等级丰度。
+
+conda remove -n Vcontact --all
+conda create -y -n vcontact python=3.2
+
+tar xvf MAVERICLab-vcontact2-c0413a6c92e8.tar.gz
+
+cd MAVERICLab-vcontact2-XXXXXXX && pip install .
+
+<https://crisprcas.i2bc.paris-saclay.fr./Home/Download>
+
+wget <http://www.paccanarolab.org/static_content/clusterone/cluster_one-1.0.jar>
+
+#### 识别病毒vContact3.7
+
+conda activate vContact3.7
+
+#### 运行路径
+
+mkdir /data/yr/virus/virus_contigs/all/virus_tax
+cd /data/yr/virus/virus_contigs/all/virus_tax
+
+#### 序列准备
+
+cp /data/yr/virus/virus_contigs/all/checkv_out/checkv/viruses.fna ./
+
+sed 's/||full//g' viruses.fna > viruses_1.fna
+tr "r" "n" < selected_end_votu.txt > 1.txt
+seqkit grep -n -f 1.txt  viruses_1.fna  -o selected_end_votu.fa
+awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' selected_end_votu.fa > selected_end_votu_1.fa
+
+mkdir /data/yr/virus/virus_contigs/all/virus_tax/vcontact_out
+cd /data/yr/virus/virus_contigs/all/virus_tax/vcontact_out
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/vcontact_prodigal
+
+vcontact2 --raw-proteins [proteins file] --rel-mode ‘Diamond’ --proteins-fp [gene-to-genome mapping file] --db 'ProkaryoticViralRefSeq94-Merged' --pcs-mode MCL --vcs-mode ClusterONE --c1-bin [path to ClusterONE] --output-dir [target output directory] -t 40
+
+### 使用vibrant
+
+conda activate VIBRANT
+
+/project/hz/VIBRANT-master/VIBRANT_run.py -i /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -t 70
+
+使用[prodigal](https://github.com/hyattpd/prodigal/wiki/Introduction)进行基因预测
+
+/biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../thirdpart/prodigal-pipe-0.0.1/prodigal-pipe  
+/data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fa 64                                            
+/data/yr/virus/virus_contigs/all/virus_tax/prodigal/vcontact_prodigal orfs ;
+
+vcontact2 --raw-proteins /data/yr/virus/virus_contigs/all/virus_tax/vcontact_prodigal/orfs.pep --rel-mode ‘Diamond’ --proteins-fp [gene-to-genome mapping file] --db 'ProkaryoticViralRefSeq94-Merged' --pcs-mode MCL --vcs-mode ClusterONE --c1-bin [path to ClusterONE] --output-dir [target output directory] -t 40
+
+#### 运行dram
+
+conda activate vs2
+mkdir /data/yr/virus/virus_contigs/all/dram
+cd /data/yr/virus/virus_contigs/all/dram
+DRAM.py annotate -i /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fa -o annotation
+
+nohup DRAM.py annotate -i /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fa -o annotation &
+
+#### 注释病毒前，需要预测orfs
+
+#### DRAM数据库导入
+
+DRAM-setup.py set_database_locations /data/DRAM1.4.3/DRAM_data
+
+#8_fragment_1
+
+#### kegg
+
+DRAM-setup.py set_database_locations --kofam_hmm_loc kofam_profiles.hmm
+
+DRAM-setup.py set_database_locations --kofam_ko_list_loc kofam_ko_list.tsv
+
+#### uniref
+
+DRAM-setup.py set_database_locations --uniref_loc uniref90.20221225.mmsdb
+
+### pfam
+
+
+DRAM-setup.py set_database_locations --pfam_hmm_loc Pfam-A.hmm.dat.gz
+
+DRAM-setup.py set_database_locations --pfam_loc pfam.mmspro
+
+#### dbcan
+
+DRAM-setup.py set_database_locations --dbcan_fam_activities_loc CAZyDB.08062022.fam-activities.txt
+
+DRAM-setup.py set_database_locations --dbcan_subfam_ec_loc CAZyDB.08062022.fam.subfam.ec.txt
+
+DRAM-setup.py set_database_locations --dbcan_loc dbCAN-HMMdb-V11.txt
+
+#### vog
+
+DRAM-setup.py set_database_locations --vogdb_loc vog_latest_hmms.txt
+
+DRAM-setup.py set_database_locations --vog_annotations_loc vog_annotations_latest.tsv.gz
+
+### viral
+
+DRAM-setup.py set_database_locations --viral_loc refseq_viral.20221225.mmsdb
+
+### MEROPS
+
+DRAM-setup.py set_database_locations --peptidase_loc peptidases.20221225.mmsdb
+
+#### Description db
+
+DRAM-setup.py set_database_locations --description_db_loc description_db.sqlite
+
+### Genome summary form:
+
+DRAM-setup.py set_database_locations --genome_summary_form_loc genome_summary_form.20221225.tsv
+
+#### Module step form
+
+DRAM-setup.py set_database_locations --module_step_form_loc module_step_form.20221225.tsv
+
+#### ETC module database
+
+DRAM-setup.py set_database_locations --etc_module_database_loc etc_mdoule_database.20221225.tsv
+
+#### Function heatmap form
+
+DRAM-setup.py set_database_locations --function_heatmap_form_loc function_heatmap_form.20221225.tsv
+
+#### AMG database
+
+DRAM-setup.py set_database_locations --amg_database_loc amg_database.20221225.tsv
+
+DRAM-setup.py set_database_locations --new_location uniref90.20221225.mmsdb
+
+DRAM-setup.py set_database_locations --old_config_file uniref90.20221225.mmsdb
+
+#### CRISPRCasFinder
+
+conda create -n CRISPRCasFinder python=3.7
+conda activate CRISPRCasFinder
+#conda remove -n CRISPRCasFinder --all
+
+/root/miniconda3/bin
+
+export PATH=/root/miniconda3/bin/:$PATH
+
+
+### 添加环境变量
+
+export PATH=`$PATH:/data/root/CRISPRCasFinder-master/bin/mkvtree2
+export PATH=$`PATH:/data/root/CRISPRCasFinder-master/bin/tblastx
+export PATH=`$PATH:/data/root/CRISPRCasFinder-master/bin/vmatch2
+export PATH=$`PATH:/data/root/CRISPRCasFinder-master/bin/vsubseqselect2
+
+perl -e "makesystemcall("/data/root/CRISPRCasFinder-master/bin/vmatch2 -help";)"
+
+seqkit fx2tab -j 30 -l  -n -i -H selected_end_votu_1.fna  |cut -f 2  - |sort - > length.txt
+
+### 安装运行phagcn2
+
+cd PhaGCN2.0
+conda env create -f environment.yaml -n phagcn2
+conda activate phagcn2
+export MKL_SERVICE_FORCE_INTEL=1
+cd database
+tar -zxvf ALL_protein.tar.gz
+cd ..
+
+python run_Speed_up.py --contigs /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fa --len 1700
+
+cp final_prediction.csv /data/yr/virus/virus_contigs/all/virus_tax/phagcn
+
+#### 定量contigs丰度
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/coverm/mean
+cd /data/yr/virus/virus_contigs/all/virus_tax/coverm/mean
+coverm contig --coupled /data/yr/data_analysis/trimming/reads/*.fastq --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 70
+
+coverm contig --coupled /data/yr/data_analysis/trimming/reads/*.fastq --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 180 -o  --bam-file-cache-directory file-cache-directory.bam  --discard-unmapped discard-unmapped.bam
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/coverm/tpm
+cd /data/yr/virus/virus_contigs/all/virus_tax/coverm/tpm
+nohup coverm contig --coupled /data/yr/data_analysis/trimming/reads/*.fastq --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 70 -m tpm -o all_tpm.tsv &
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/coverm/count
+cd /data/yr/virus/virus_contigs/all/virus_tax/coverm/count
+nohup coverm contig --coupled /data/yr/data_analysis/trimming/reads/*.fastq --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 70 -m count -o all_count.tsv &
+
+##### coverm获得定量和匹配信息
+
+#### coverm contig --bam-file-cache-directory file-cache-directory.bam --coupled /data/yr/data_analysis/trimming/reads/*.fastq --discard-unmapped  --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 180 -m count  -o all_count.tsv
+
+#### vcontact2
+
+vcontact2 --raw-proteins /data/yr/virus/virus_contigs/all/virus_tax/prodigal/vcontact_prodigal/orfs.pep --proteins-fp /data/yr/virus/virus_contigs/all/virus_tax/prodigal/vcontact_prodigal/gene_to_genome_map.csv --db 'ProkaryoticViralRefSeq211-Merged' --output-dir vcontact2_output
+
+#### CrisprCasFinder
+
+singularity exec -B $PWD /data/root/CRISPRCasFinder-master/CrisprCasFinder.simg perl /data/root/CRISPRCasFinder-master/CRISPRCasFinder_4_2_20.pl -in sequence.fasta -so /data/root/CRISPRCasFinder-master/sel392v2.so -cf /data/root/CRISPRCasFinder-master/CasFinder-2.0.3 -drpt /data/root/CRISPRCasFinder-master/supplementary_files/repeatDirection.tsv -rpts /data/root/CRISPRCasFinder-master/supplementary_files/Repeat_List.csv -cas -def G -out RES21092020_2
+
+singularity exec -B $PWD CrisprCasFinder.simg perl /usr/local/CRISPRCasFinder/CRISPRCasFinder.pl -so /usr/local/CRISPRCasFinder/sel392v2.so -cf /usr/local/CRISPRCasFinder/CasFinder-2.0.3 -drpt /usr/local/CRISPRCasFinder/supplementary_files/repeatDirection.tsv -rpts /usr/local/CRISPRCasFinder/supplementary_files/Repeat_List.csv -cas -def G -out RES21092020_2 -in sequence.fasta
+
+singularity exec -B $PWD CrisprCasFinder.simg perl CRISPRCasFinder_4_2_20.pl -in sequence.fasta -out RES21092020_2  -so sel392v2.so -cf CasFinder-2.0.3 -drpt supplementary_files/repeatDirection.tsv -rpts supplementary_files/Repeat_List.csv -cas -def G
+
+##### CrisprCasFinder
+
+最终在/data/root/CRISPRCasFinder-release-4.2.20_2中继续安装
+
+### 重新安装4.2.20版本
+
+#### DRAM
+
+cd /data/yr/virus/virus_contigs/all/dram/
+DRAM.py annotate -i '/data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna' -o annotation
+
+#### 重新安装
+
+pip install pandas -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+pip install networkx -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+pip install scikit-bio -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+conda install -c conda-forge -c bioconda mmseqs2
+
+conda install -c bioconda hmmer
+
+conda install trnascan-se -c bioconda
+
+scikit-bio, prodigal, mmseqs2, hmmer and tRNAscan-SE need to be installed manually
+conda install
+
+pip install DRAM-bio -i <https://pypi.tuna.tsinghua.edu.cn/simple>
+
+##### 物种鉴定
+
+#### blastp
+
+#### diamond
+
+# 在/biostack/tools/alignment/diamond-2.0.6/diamond指定了数据库，因此比对的时候需要输入biostack
+
+mkdir -p /data/database/refseq_virus_db/diamond
+cd /data/database/refseq_virus_db/diamond
+
+### 核酸
+
+diamond makedb --in /data/database/refseq_virus_db/viral.genomic.fna -d refseq_virus_db_diamond
+
+diamond blastx -d /data/database/refseq_virus_db/diamond/refseq_virus_db_diamond.dmnd -q /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -o matches.m8
+
+mkdir -p /data/database/refseq_virus_db/diamond_fasta
+cd /data/database/refseq_virus_db/diamond_fasta
+cp /data/database/refseq_virus_db/viral.genomic.fna viral.genomic.fasta
+diamond makedb --in viral.genomic.fasta -d viral.genomic.fasta
+
+diamond blastx -d /data/database/refseq_virus_db/diamond_fasta/viral.genomic.fasta.dmnd -q /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -o matches.m8
+
+diamond blastx --threads 70 -d /data/database/refseq_virus_db/diamond_fasta/viral.genomic.fasta.dmnd --query /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+### 氨基酸
+
+mkdir -p /data/database/refseq_virus_db/diamond_faa
+cd /data/database/refseq_virus_db/diamond_faa
+cp ../viral.protein.faa ./
+diamond makedb --in viral.protein.faa -d viral.protein.faa
+
+diamond blastp --threads 70 -d /data/database/refseq_virus_db/diamond_faa/viral.protein.faa.dmnd --query /data/yr/virus/virus_contigs/all/virus_tax/prodigal/vcontact_prodigal/orfs.pep --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+#### 第一次mmseq建立核酸数据库，版本ref_viruses_2023_1_2
+
+#### 在DRAM环境中建立数据库，运行时需要激活conda activate DRAM
+
+blastdbcmd -db /data/database/refseq_virus_db/mmseq3/viral.genomic.fna -entry all > viral
+
+mmseqs createdb /data/database/refseq_virus_db/viral.genomic.fna viral
+
+mmseqs createindex --search-type 3 viral tmp
+
+mmseqs createtaxdb viral tmp --ncbi-tax-dump taxonomy  --tax-mapping-file viral.taxid
+
+blastdbcmd -db viral -entry all -outfmt "%a %T" > viral.taxid
+
+#### 第二次mmseq建立蛋白数据库，版本ref_viruses_2023_01_13
+
+#### 在DRAM环境中建立数据库，运行时需要激活conda activate DRAM
+
+mkdir -p /data/database/refseq_virus_db_2/diamond_faa
+cd /data/database/refseq_virus_db_2/diamond_faa
+cp /data/database/ref_viruses_2023_01_13/viral.1.protein.faa ./
+diamond makedb --in viral.1.protein.faa -d viral.protein.faa
+
+### 将核酸序列转为氨基酸序列
+
+prodigal -i /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -a /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.faa
+
+diamond blastp --threads 70 -d /data/database/refseq_virus_db_2/diamond_faa/viral.protein.faa.dmnd --query /data/yr/virus/virus_contigs/all/virus_tax/prodigal/vcontact_prodigal/orfs.pep --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+#### 第二次mmseq建立蛋白数据库，版本ref_viruses_2023_01_13
+
+#### 在DRAM环境中建立数据库，运行时需要激活conda activate DRAM
+
+mkdir /data/database/refseq_virus_db_2
+cd /data/database/refseq_virus_db_2
+
+blastdbcmd -db /data/database/ref_viruses_2023_01_13/viral.1.protein.faa -entry all > viral
+
+mmseqs createdb /data/database/refseq_virus_db/viral.genomic.fna viral
+
+mmseqs createindex --search-type 3 viral tmp
+
+mmseqs createtaxdb viral tmp --ncbi-tax-dump taxonomy  --tax-mapping-file viral.taxid
+
+blastdbcmd -db viral -entry all -outfmt "%a %T" > viral.taxid
+
+#### 在DRAM环境中建立数据库，运行时需要激活conda activate DRAM
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/mmseq2
+cd /data/yr/virus/virus_contigs/all/virus_tax/mmseq2
+mmseqs easy-taxonomy  /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta  /data/database/refseq_virus_db/mmseq2/viral  test.result tmp
+
+For each viral population, ORFs were called using Prodigal (Hyatt et al., 2010) and the resulting protein sequences were used as input for vConTACT2 (Jang et al., 2019) and for blastp. Viral populations represented by contigs > 10kb were clustered with Viral RefSeq release 85 viral genomes using vConTACT2. Those that clustered with a virus from RefSeq based on amino acid homology based on diamond (Buchfink et al., 2015) alignments were able to be assigned to a known viral taxonomic genus and family. For GOV 2.0 viral populations that could not be assigned taxonomy or were < 10kb, family level taxonomy was assigned using a majority-rules approach, where if > 50% of a genome’s proteins were assigned to the same viral family using a blastp bitscore ≥ 50 with a Viral RefSeq virus, it was considered part of that viral family.
+
+#### 把每个contigs的基因都注释出来，观测是否大于50%的是病毒的蛋白
+
+mmseqs createdb viral.genomic.fna viral.genomic.fna
+mmseqs createtaxdb viral.genomic.fna tmp
+mmseqs createindex viral.genomic.fna tmp
+mmseqs easy-taxonomy examples/QUERY.fasta targetDB alnRes tmp
+
+mmseqs createdb viral.genomic.fna viral
+mmseqs createindex viral tmp --search-type 3
+
+#### 先用blast建立索引
+
+blastdbcmd -db ref_viruses_2023_1_2 -entry all > ref_viruses.fna
+
+dustmasker -in Nuc.fasta -infmt fasta -parse_seqids -outfmt maskinfo_asn1_bin -out Nuc_all.asnb
+
+dustmasker -in viral.genomic.fna -infmt fasta -parse_seqids -outfmt maskinfo_asn1_bin -out viral_Nuc_all.asnb
+
+makeblastdb -in viral.genomic.fna -input_type fasta -dbtype nucl -parse_seqids  -mask_data viral_Nuc_all.asnb -out Nuc_all
+
+#### 下载网址<https://ftp.ncbi.nlm.nih.gov/blast/db/做viral.taxid文件>
+
+#### fasta下载<https://ftp.ncbi.nlm.nih.gov/refseq/release/viral/>
+
+blastdbcmd -db /data/database/ref_viruses_2023_1_2/ref_viruses_rep_genomes -entry all > viral
+blastdbcmd -db /data/database/ref_viruses_2023_1_2/ref_viruses_rep_genomes -entry all -outfmt "%a %T" > viral.taxid
+cp /data/database/ref_viruses_2023_1_2/viral.taxid /data/database/refseq_virus_db/mmseq3
+cd /data/database/refseq_virus_db/mmseq3
+mkdir taxonomy && cd taxonomy
+wget <https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz>
+tar xzvf taxdump.tar.gz
+cd ..
+mmseqs createtaxdb viral tmp --ncbi-tax-dump taxonomy  --tax-mapping-file viral.taxid
+
+#### 运行
+
+mmseqs easy-taxonomy  /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta  /data/database/refseq_virus_db/mmseq3/viral  virus.result tmp
+
+#### fastq
+
+for i in `ls /data/yr/data_analysis/93_mags`;
+do
+awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' /data/yr/data_analysis/93_mags/`${i} > /data/yr/data_analysis/93/$`{i};
+done
+
+for i in `cut -f4 /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/virus.result_lca.tsv`;
+do
+grep "${i}" /data/database/refseq_virus_db/taxid10239.nbr >>  /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/all.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/1.txt`;
+do
+grep "${i}" virus.result_tophit_aln >>  /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/all_1.txt;
+done
+
+cat all_1.txt | sort | uniq > all_2.txt
+
+for i in `cut -f2 /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/all_2.txt`;
+do
+grep "${i}" virus.result_tophit_report >>  /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/tax_2.txt;
+done
+
+for i in `cut -f2 /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/all_2.txt`;
+do
+grep "${i}" virus.result_tophit_report >>  /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/tax_2.txt;
+done
+
+for i in `cut -f2 /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/virus.result_tophit_aln`;
+do
+grep "${i}" virus.result_tophit_report >>  /data/yr/virus/virus_contigs/all/virus_tax/mmseq2/tax_all.txt;
+done
+
+#### 定量基因丰度
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/quant/report/
+
+#### 定量文件准备(selected_selected_end_prodigal.ffn)
+
+cd /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/VIBRANT_results_selected_end_votu_1
+cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/VIBRANT_results_selected_end_votu_1/VIBRANT_AMG_individuals_selected_end_votu_1.tsv > /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/VIBRANT_results_selected_end_votu_1/select_proten.txt
+cp select_proten.txt /data/yr/virus/virus_contigs/all/virus_tax/quant
+cp /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.ffn /data/yr/virus/virus_contigs/all/virus_tax/quant
+
+cd /data/yr/virus/virus_contigs/all/virus_tax/quant
+seqkit grep -f select_proten.txt  selected_end_votu_1.prodigal.ffn  -o selected_selected_end_prodigal.ffn
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+cp /data/yr/virus/virus_contigs/all/virus_tax/quant/selected_selected_end_prodigal.ffn /data/yr/virus/virus_contigs/all/virus_tax/quant/ffn/${i}.ffn;
+done
+
+selected_end_votu_1.prodigal.ffn
+
+cut -f1  /data/yr/virus/virus_contigs/all/virus_tax/quant/group.txt  | 
+grep -v "#" | 
+perl -ane 'print qq{salmon index -t /data/yr/virus/virus_contigs/all/virus_tax/quant/ffn/`$F[0].ffn --keepDuplicates -p 16 -i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/$`F[0] ;
+salmon quant -i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/`$F[0] -o /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/$`F[0] -p 21 --numBootstraps 100 --libType A --meta -1 /data/yr/data_analysis/trimming/reads/F[0]_R1.fastq -2 /data/yr/data_analysis/trimming/reads/F[0]_R2.fastq;
+tail -n +2 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`$F[0]/quant.sf | /biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tabtk cut -r -f1,2,5,4 - | /biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tsv-utils add_headline "#genetlengthtcountsttpm" - >/data/yr/virus/virus_contigs/all/virus_tax/quant/report/$`F[0].txt ;
+/biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tabtk cut -r -f1,4 /data/yr/virus/virus_contigs/all/virus_tax/quant/report/`$F[0].txt >/data/yr/virus/virus_contigs/all/virus_tax/quant/report/$`F[0].abundance.annotation.txt ;n}' | 
+bash
+
+grep '^>' /data/yr/virus/virus_contigs/all/virus_tax/quant/ok.ffn | cut -d ' ' -f 1 | sed 's/^>//g' > ok.txt
+
+cut -d ' ' -f 1 /data/yr/virus/virus_contigs/all/virus_tax/quant/ffn/G1.ffn > ok.ffn
+
+salmon index -t /data/yr/virus/virus_contigs/all/virus_tax/quant/ok.ffn -d ok.txt  -i ok_salmon_sa_index
+
+salmon quant  -l A --numBootstraps 100 --meta -1 /data/yr/data_analysis/trimming/reads/G1_R1.fastq -2 /data/yr/data_analysis/trimming/reads/G1_R2.fastq  -i ok_salmon_sa_index -o G1_salmon.count -p 100
+
+grep -v "#" | 
+perl -ane 'print qq{salmon index -t /data/yr/virus/virus_contigs/all/virus_tax/quant/ffn/`$F[0].ffn --keepDuplicates -p 16 -i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/$`F[0] ;
+salmon quant -i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/`$F[0] -o /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/$`F[0] -p 21 --numBootstraps 100 --libType A --meta -1 /data/yr/data_analysis/trimming/reads/F[0]_R1.fastq -2 /data/yr/data_analysis/trimming/reads/F[0]_R2.fastq;
+tail -n +2 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`$F[0]/quant.sf | /biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tabtk cut -r -f1,2,5,4 - | /biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tsv-utils add_headline "#genetlengthtcountsttpm" - >/data/yr/virus/virus_contigs/all/virus_tax/quant/report/$`F[0].txt ;
+/biostack/tools/protocols/meta-seq-0.0.3/bins/annotation/../../binaries/tabtk cut -r -f1,4 /data/yr/virus/virus_contigs/all/virus_tax/quant/report/`$F[0].txt >/data/yr/virus/virus_contigs/all/virus_tax/quant/report/$`F[0].abundance.annotation.txt ;n}' | 
+bash
+
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+salmon index -t /data/yr/virus/virus_contigs/all/virus_tax/quant/ok.ffn                                                 
+--keepDuplicates                                                                                                            
+-p 16                                                                                                                       
+-i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/`${i};
+salmon quant                                                                                                                         -i /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/$`{i}                                                                 
+-o /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i}                                                                    -p 64                                                                                                                            --numBootstraps 100                                                                                                              --libType A                                                                                                                      --meta                                                                                                                           -1 /data/yr/data_analysis/trimming/reads/$`{i}_R1.fastq                                                               
+-2 /data/yr/data_analysis/trimming/reads/${i}_R2.fastq ;
+done
+
+#### 定量所有votu的orf
+
+##### 运行路径/data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant
+cd /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant
+cp /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.ffn ./
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/libs/
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/report/
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+salmon index -t selected_end_votu_1.prodigal.ffn                                                
+--keepDuplicates                                                                                                            
+-p 100                                                                                                                       
+-i /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/libs/`${i};
+salmon quant                                                                                                                         -i /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/libs/$`{i}                                                                 
+-o /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}                                                                    -p 100                                                                                                                            --numBootstraps 100                                                                                                              --libType A                                                                                                                      --meta                                                                                                                           -1 /data/yr/data_analysis/trimming/reads/$`{i}_R1.fastq                                                               
+-2 /data/yr/data_analysis/trimming/reads/${i}_R2.fastq ;
+done
+
+for i in G3 G4 G6 W1 W2 W5 W6;
+do
+rm -r /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i};
+rm -r /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/$`{i};
+mkdir /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i};
+mkdir /data/yr/virus/virus_contigs/all/virus_tax/quant/libs/$`{i};
+done
+
+#### 比对病毒序列
+
+病毒-宿主连锁预测三种方法，包括同源性匹配、tRNA相似性和CRISPR间隔物相似性，用于将vOTU与其推定的原核（即细菌和古菌）宿主联系起来[65]。对于宿主搜索，除了从我们的数据集中恢复的356个中到高质量MAG外，我们还从GTDB数据库（95版）[66]下载了所有代表性基因组，并将其组合为宿主参考数据库。在同源性匹配检测中，blastn v2.5.0 + [59]用于使用参数“身份”将vOTU与主机参考数据库identity ≥ 70，coverage ≥ 75，e-value ≤ 10−3，bit score ≥ 50”，如前所述[67]。至于tRNA相似性方法，vOTU中的tRNA由tRNAScan SE v1.23[68]使用细菌和古菌模式识别，然后使用blastn v2.5.0根据宿主参考数据库查询获得的tRNA + [59]带有参数“identity = 100, coverage = 100”. 对于CRISPR间隔物相似性方法，使用具有默认参数的CRISPRCasFinder[69]从宿主参考数据库中确定和提取间隔物序列。然后通过blastn v2.5.0查询所有vOTU的间隔器 + [59]带参数word size = 16, coverage = 100, mismatch ≤ 3, e-value ≤ 10−6 [70]. 最后，通过任何一种方法预测的宿主被合并为病毒的最终潜在宿主。表S4列出了所有预测的病毒-宿主联系。
+
+Virus-host linkage prediction Three methods, including homology matches, tRNAs similarity, and CRISPR spacers similarity, were used to link vOTUs to their putative prokaryotic (i.e., bacteria and archaea) hosts [65]. For host searches, in addition to the 356 medium-to-high quality MAGs recovered from our dataset, we also downloaded all representative genomes from the GTDB database (release 95) [66] and combined them as the host reference database. In the homology match detection, blastn v2.5.0 + [59] was used to align vOTUs to the host reference database with parameters “identity ≥ 70, query coverage ≥ 75, e-value ≤ 10−3, bit score ≥ 50” as previously suggested [67]. As for the tRNAs similarity method, the tRNAs in vOTUs were identified by tRNAScan-SE v1.23 [68] using the bacterial and archaeal mode, and then, the obtained tRNAs were queried against the host reference database using blastn v2.5.0 + [59] with parameters “identity = 100, coverage = 100”. As for the CRISPR spacers similarity method, CRISPRCasFinder [69] with default parameters was used to determine and extract the spacer sequences from the host reference database. Spacers were then queried against all vOTUs by blastn v2.5.0 + [59] with parameters “word size = 16, coverage = 100, mismatch ≤ 3, e-value ≤ 10−6” [70]. Finally, the hosts predicted by any of the methods were combined as the final potential hosts of viruses. All predicted virus-host linkages are listed in Table S4.
+
+![image.png](https://note.youdao.com/yws/res/83849/WEBRESOURCE2b77c30dab3c1b7c55878ad8fedfeba0)
+<https://zhuanlan.zhihu.com/p/369150983>
+
+#### votu与mags
+
+votu在/data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta
+mags在/data/yr/data_analysis/93中
+mkdir -p /data/yr/virus/virus_contigs/all/cas/blast
+
+for i in /data/meta-seq-XJ/data_analysis/annotation/metaspades_prodigal/orfs/*.fa
+do
+base=`$(basename $`i .pep)
+echo `$base
+    fastx-utils rename /data/meta-seq-XJ/data_analysis/trimming/reads/$`{base}.R1.fastq `${base} > $`{base}_T1.fastq
+done
+
+#### 改名以后顺序不变，可以对应找是哪条原始的contigs
+
+for i in /data/yr/virus/virus_contigs/all/cas/blast/93/*.fa
+do
+base=`$(basename $`i .fa)
+echo `$base
+    fastx-utils rename /data/yr/virus/virus_contigs/all/cas/blast/93/$`{base}.fa `${base} > /data/yr/virus/virus_contigs/all/cas/blast/T/$`{base}_T.fa
+done
+cat /data/yr/virus/virus_contigs/all/cas/blast/T/*.fa > /data/yr/virus/virus_contigs/all/cas/blast/mags_T.fa
+
+#### 建库
+
+mkdir -p /data/yr/virus/virus_contigs/all/cas/blast/db_mags_T
+cd /data/yr/virus/virus_contigs/all/cas/blast/db_mags_T
+
+diamond makedb --in /data/yr/virus/virus_contigs/all/cas/blast/mags_T.fa -d mags_T.fa
+
+diamond blastx --threads 70 -d mags_T.fa.dmnd --query /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+### 第一列是id
+
+参考资源:<https://www.cnblogs.com/djx571/p/9510550.html>
+
+#### 看物种注释结果（这一步需要重新进入，不能使用biostack里的tRNAScan，使用vs2环境中指定好的模块）
+
+### conda activate vs2
+
+mkdir -p /data/yr/virus/virus_contigs/all/cas/tRNAScan
+cd /data/yr/virus/virus_contigs/all/cas/tRNAScan
+nohup tRNAscan-SE -o tRNA.out -f rRNA.ss -m tRNA.stats -a tRNA.fasta --thread 80 selected_end_votu_1.fasta &
+
+#### blast trna
+
+mkdir -p /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast
+cd /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast
+
+cut -d ' ' -f 1 /data/yr/virus/virus_contigs/all/cas/tRNAScan/fasta/tRNA.fasta | awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' - | sed 's/./_/g' - > tRNA1.fasta
+
+diamond blastx --threads 70 -d /data/yr/virus/virus_contigs/all/cas/blast/db_mags_T/mags_T.fa.dmnd --query tRNA1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+#### 使用biostack的blastn
+
+/data/yr/virus/virus_contigs/all/cas/blast/mags_T.fa
+mkdir -p /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast/biostack_blastn
+cd /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast/biostack_blastn
+makeblastdb -in /data/yr/virus/virus_contigs/all/cas/blast/mags_T.fa -input_type fasta -dbtype nucl -title mags_T -out mags_T_db #contigs.fasta即为数据库，CL为数据库名，CL_db为以后blast+搜索时要用到的-db的参数，可以自己起一个有意义的名字
+cut -d ' ' -f 1 /data/yr/virus/virus_contigs/all/cas/tRNAScan/fasta/tRNA.fasta | awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' - | sed 's/./_/g' - > tRNA1.fasta
+
+blastn -db  mags_T_db  -query tRNA1.fasta -out tRNAScan.out -outfmt 6 -num_threads 20
+
+### 结果为0
+
+### 提取宿主的再预测
+
+nohup tRNAscan-SE -o tRNA.out -f rRNA.ss -m tRNA.stats -a tRNA.fasta --thread 100 /data/yr/virus/virus_contigs/all/cas/blast/mags_T.fa &
+
+cut -d ' ' -f 1 /data/yr/virus/virus_contigs/all/cas/tRNAScan/tran_mags/tRNA.fasta | awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' - | sed 's/./_/g' - > /data/yr/virus/virus_contigs/all/cas/tRNAScan/tran_mags/tRNA1.fasta
+
+diamond makedb --in /data/yr/virus/virus_contigs/all/cas/tRNAScan/tran_mags/tRNA1.fasta -d /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast/tRNA1_fasta
+
+cd /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast/
+
+# diamond blastx --threads 70 -d /data/yr/virus/virus_contigs/all/cas/tRNAScan/blast/tRNA1_fasta.dmnd --query tRNA1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+for i in `ls /data/yr/virus/virus_contigs/all/cas/crisper/casfinder/`;
+do
+fastx-utils rename /data/yr/virus/virus_contigs/all/cas/crisper/casfinder/`${i}/MincedFiles/mincedRes_spacers.fa $`{i} > /data/yr/virus/virus_contigs/all/cas/crisper/mincedRes_spacers/${i}_mincedRes_spacers.fa;
+done
+
+cat /data/yr/virus/virus_contigs/all/cas/crisper/mincedRes_spacers/*.fa > /data/yr/virus/virus_contigs/all/cas/crisper/mincedRes_spacers_all.fa
+
+### 建索引
+
+cd /data/yr/virus/virus_contigs/all/cas/crisper
+diamond makedb --in /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -d /data/yr/virus/virus_contigs/all/cas/crisper/selected_end_votu_1
+
+diamond blastx --threads 70 -d selected_end_votu_1.dmnd --query mincedRes_spacers_all1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+tr "r" "n" < mincedRes_spacers_all.fasta > mincedRes_spacers_all1.fasta
+
+blastn  -db selected_end_votu_1 -in mincedRes_spacers_all.fasta -input_type fasta -dbtype nucl --out diamond.out --outfmt 6  --index-chunks 4
+
+makeblastdb -in /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta -input_type fasta -dbtype nucl -title selected_end_votu_1 -out selected_end_votu_1_db #contigs.fasta即为数据库，CL为数据库名，CL_db为以后blast+搜索时要用到的-db的参数，可以自己起一个有意义的名字
+
+blastn -db  selected_end_votu_1_db  -query mincedRes_spacers_all.fasta -out input_blastn.out -outfmt 6 -num_threads 20
+
+# 此处参数适用于计算ChIP-reads/input-reads ratio, input_paired.fa文件要求forward和reverse交错排列，可以通过RepeatExplorer处理
+
+#### 整理votu的整个orf结果
+
+cd /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/counts
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f1,4 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i}/quant.sf > /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon_result/tpm/$`{i}_tpm.txt;
+cut -f1,5 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i}/quant.sf > /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon_result/counts/$`{i}_counts.txt;
+done
+
+#### 整理votu的amg结果
+
+/data/yr/virus/virus_contigs/all/virus_tax/quant/
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon_result/tpm /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon_result/counts
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf > /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/$`{i}_tpm.txt;
+cut -f1,5 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf > /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/counts/$`{i}_counts.txt;
+done
+
+tsv-utils bins -d "|" -t 2 -s 1 /data/yr/mags_metabolic/4_mags_map/Dyadobacter.map.txt > /data/yr/mags_metabolic/4_mags_map/Dyadobacter.map.bin.txt
+
+### 准备：mags经过prokka预测为orf，并注释kegg数据库获得ko；且不去冗余，或97%
+
+1.首先将orf基于cleanreads定量，得到每个orf的tpm值；
+2./data/yr/9_mags_ko/中含有9个mags对应的ko，需要筛选出每个文件注释相同ko的orf，并进一步得到对应ko的tpm值；
+3.之后将注释到相同ko的orf的tpm值合并，即为这个mags某个ko的潜在功能表达量；
+4.最后根据ko来合并相同symbol的tpm。
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/9_mags_ko/metawrap_bin.160_prokka.ko.txt | cut -f1,3 > /data/yr/9_mags_ko/bins/metawrap_bin.160_prokka_family.txt ;
+
+cut -f 1,4 /data/yr/9_mags_ko/quant/G1/salmon/metawrap_bin.160_prokka/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/9_mags_ko/bins/metawrap_bin.160_prokka_family.txt - > /data/yr/9_mags_ko/abundance/G1_metawrap_bin.160_prokka_family.txt;
+
+tr "r" "n" < /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/VIBRANT_annotations_selected_end_votu_1_all_ko.txt > all_ko.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/all_ko.txt | cut -f1,3 > /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/all_ko_bin.txt ;
+
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/all_ko_bin.txt - > /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/$`{i}_all_ko.txt;
+done
+
+#### 整理votu的amg结果
+
+tr "r" "n" < /data/yr/virus/virus_contigs/all/virus_tax/quant/VIBRANT_AMG_individuals_selected_end_votu_1.txt > amg_ko.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/all/virus_tax/quant/amg_ko.txt | cut -f1,3 > /data/yr/virus/virus_contigs/all/virus_tax/quant/amg_ko_bin.txt ;
+
+##### 分裂解和温和噬菌体再做一次
+
+1.将votu分成裂解和温和
+2.对应匹配结果
+
+#### lysogenic_all_ko
+
+mkdir -p /data/yr/virus/virus_contigs/lysogenic/all_ko
+mkdir -p /data/yr/virus/virus_contigs/lysogenic/all_ko/result
+cd /data/yr/virus/virus_contigs/lysogenic/all_ko
+
+tr "r" "n" < /data/yr/virus/virus_contigs/lysogenic/all_ko/lysogenic_all_ko.txt | cut -f 1,3 > lysogenic_all_ko1.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/lysogenic/all_ko/lysogenic_all_ko1.txt | cut -f1,3 > /data/yr/virus/virus_contigs/lysogenic/all_ko/lysogenic_all_ko_bin.txt ;
+
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lysogenic/all_ko/lysogenic_all_ko_bin.txt - > /data/yr/virus/virus_contigs/lysogenic/all_ko/result/$`{i}_lysogenic_all_ko_bin.txt;
+done
+
+#### lysogenic_amg_ko
+
+mkdir -p /data/yr/virus/virus_contigs/lysogenic/amg_ko
+mkdir -p /data/yr/virus/virus_contigs/lysogenic/amg_ko/result
+cd /data/yr/virus/virus_contigs/lysogenic/amg_ko
+
+tr "r" "n" < /data/yr/virus/virus_contigs/lysogenic/amg_ko/lysogenic_amg_ko.txt | cut -f 1,3 > lysogenic_amg_ko1.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/lysogenic/amg_ko/lysogenic_amg_ko1.txt | cut -f1,3 > /data/yr/virus/virus_contigs/lysogenic/amg_ko/lysogenic_amg_ko_bin.txt ;
+
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lysogenic/amg_ko/lysogenic_amg_ko_bin.txt - > /data/yr/virus/virus_contigs/lysogenic/amg_ko/result/$`{i}_lysogenic_amg_ko_bin.txt;
+done
+
+##### 重新做，之前直接定量amg的方式不对
+
+rm -r /data/yr/virus/virus_contigs/lysogenic/amg_ko/result/result
+mkdir -p /data/yr/virus/virus_contigs/lysogenic/amg_ko/result/result
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lysogenic/amg_ko/lysogenic_amg_ko_bin.txt - > /data/yr/virus/virus_contigs/lysogenic/amg_ko/result/result/$`{i}_lysogenic_amg_ko_bin.txt;
+done
+
+##### 重新做，之前直接定量amg的方式不对
+
+rm -r  /data/yr/virus/virus_contigs/lytic/amg_ko/result/result
+mkdir -p /data/yr/virus/virus_contigs/lytic/amg_ko/result/result
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lytic/amg_ko/lytic_amg_ko_bin.txt - > /data/yr/virus/virus_contigs/lytic/amg_ko/result/result/$`{i}_lytic_amg_ko_bin.txt;
+done
+
+#### lytic_all_ko
+
+mkdir -p /data/yr/virus/virus_contigs/lytic/all_ko
+mkdir -p /data/yr/virus/virus_contigs/lytic/all_ko/result
+cd /data/yr/virus/virus_contigs/lytic/all_ko
+
+tr "r" "n" < /data/yr/virus/virus_contigs/lytic/all_ko/lytic_all_ko.txt | cut -f 1,3 > lytic_all_ko1.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/lytic/all_ko/lytic_all_ko1.txt | cut -f1,3 > /data/yr/virus/virus_contigs/lytic/all_ko/lytic_all_ko_bin.txt ;
+
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lytic/all_ko/lytic_all_ko_bin.txt - > /data/yr/virus/virus_contigs/lytic/all_ko/result/$`{i}_lytic_all_ko_bin.txt;
+done
+
+#### lytic_amg_ko
+
+mkdir -p /data/yr/virus/virus_contigs/lytic/amg_ko
+mkdir -p /data/yr/virus/virus_contigs/lytic/amg_ko/result
+cd /data/yr/virus/virus_contigs/lytic/amg_ko
+
+tr "r" "n" < /data/yr/virus/virus_contigs/lytic/amg_ko/lytic_amg_ko.txt | cut -f 1,3 > lytic_amg_ko1.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1  /data/yr/virus/virus_contigs/lytic/amg_ko/lytic_amg_ko1.txt | cut -f1,3 > /data/yr/virus/virus_contigs/lytic/amg_ko/lytic_amg_ko_bin.txt ;
+
+for i in G1  G3  G4  G6  W1  W2  W5  W6;
+do
+cut -f 1,4 /data/yr/virus/virus_contigs/all/virus_tax/quant/salmon/`${i}/quant.sf | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils view -c - | /biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils melt -d ',' /data/yr/virus/virus_contigs/lytic/amg_ko/lytic_amg_ko_bin.txt - > /data/yr/virus/virus_contigs/lytic/amg_ko/result/$`{i}_lytic_amg_ko_bin.txt;
+done
+
+
+
+#### 使用dram计算amg
+
+mkdir /data/yr/virus/virus_contigs/all/dram/annotation/select
+cd /data/yr/virus/virus_contigs/all/dram/annotation/select
+
+mkdir -p /data/yr/virus/virus_contigs/all/dram/annotation/quant/salmon/
+mkdir -p /data/yr/virus/virus_contigs/all/dram/annotation/quant/libs/
+mkdir -p /data/yr/virus/virus_contigs/all/dram/annotation/quant/report/
+
+#### 定量文件准备(selected_selected_end_prodigal.ffn)
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+mkdir /data/yr/virus/virus_contigs/all/dram/annotation/quant/salmon/`${i};
+mkdir /data/yr/virus/virus_contigs/all/dram/annotation/quant/libs/$`{i};
+done
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+salmon index -t /data/yr/virus/virus_contigs/all/dram/annotation/quant/genes.fna                                            
+--keepDuplicates                                                                                                            
+-p 100                                                                                                                       
+-i /data/yr/virus/virus_contigs/all/dram/annotation/quant/libs/`${i};
+salmon quant                                                                                                                         -i /data/yr/virus/virus_contigs/all/dram/annotation/quant/libs/$`{i}                                                                 
+-o /data/yr/virus/virus_contigs/all/dram/annotation/quant/salmon/`${i}                                                                    -p 100                                                                                                                            --numBootstraps 100                                                                                                              --libType A                                                                                                                      --meta                                                                                                                           -1 /data/yr/data_analysis/trimming/reads/$`{i}_R1.fastq                                                               
+-2 /data/yr/data_analysis/trimming/reads/${i}_R2.fastq ;
+done
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+for j in `cut -f1 /data/yr/virus/virus_contigs/all/dram/annotation/select/select_kegg_amg.txt`;
+do
+grep "`${j}" /data/yr/virus/virus_contigs/all/dram/annotation/quant/salmon/$`{i}/quant.sf >> /data/yr/virus/virus_contigs/all/dram/annotation/select/${i}.txt;
+done
+done
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+cut -f1,4 /data/yr/virus/virus_contigs/all/dram/annotation/quant/salmon/`${i}/quant.sf >/data/yr/virus/virus_contigs/all/dram/annotation/select/quant/$`{i}.txt;
+done
+
+##### 第二次物种注释
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/2/diamond
+cd  /data/yr/virus/virus_contigs/all/virus_tax/2/diamond
+
+#### blatsx
+
+diamond blastx --threads 70 -d /data/database/refseq_virus_db/diamond_fasta/viral.genomic.fasta.dmnd --query /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta --out diamond.out --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore qlen qcovhsp  --max-target-seqs 10 --min-score 30 --block-size 0.6  --index-chunks 4 --sensitive
+
+### mmseq2
+
+conda activate DRAM
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/2/mmseq2
+cd /data/yr/virus/virus_contigs/all/virus_tax/2/mmseq2
+
+mmseqs easy-taxonomy /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta  /data/database/refseq_virus_db/mmseq3/viral  virus.result tmp
+
+mmseqs easy-taxonomy  /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta  /data/database/refseq_virus_db/mmseq3/viral  virus.result tmp
+
+#### 寻找通路，补齐宿主通路
+
+mkdir -p /data/yr/virus/host_mapping
+cd /data/yr/virus/host_mapping
+for i in `cut -f1 /data/yr/virus/host_mapping/viruses_host.txt`;
+do
+cp  /data/yr/mags_annotation/${i}_prokka.ko-bins.txt /data/yr/virus/host_mapping/host_ko;
+done
+
+.pathway-bins.txt
+
+for i in `cut -f1 /data/yr/virus/host_mapping/viruses_host.txt`;
+do
+cp  /data/yr/mags_annotation/${i}_prokka.pathway-bins.txt /data/yr/virus/host_mapping/host_map;
+done
+
+for i in `cut -f1 /data/yr/virus/host_mapping/viruses_host.txt`;
+do
+cut -f1,2,3  /data/yr/mags_annotation/${i}_prokka.pathway-bins.txt >>  /data/yr/virus/host_mapping/host_map.txt
+done
+
+for i in `cut -f1 /data/yr/virus/host_mapping/viruses_host.txt`;
+do
+cut -f1,2,3  /data/yr/mags_annotation/${i}_prokka.ko-bins.txt >>  /data/yr/virus/host_mapping/host_ko.txt
+done
+
+for i in `cut -f1 /data/yr/virus/host_mapping/viruses_host.txt`;
+do
+cut -f1,2  /data/yr/mags_annotation/${i}_prokka.ko.txt >>  /data/yr/virus/host_mapping/host_ko_ko.txt
+done
+
+for i in metawrap_bin.133 metawrap_bin.134 metawrap_bin.15 metawrap_bin.160 metawrap_bin.19 metawrap_bin.23 metawrap_bin.37 metawrap_bin.55 metawrap_bin.73 metawrap_bin.77 Sem_G4_bin.8 Sem_G6_bin.1;
+do
+mkdir -p /data/yr/virus/host_prokka/${i};
+done
+
+##### 定量宿主次相应amg基因的丰度
+
+for i in metawrap_bin.133 metawrap_bin.134 metawrap_bin.15  metawrap_bin.19 metawrap_bin.23 metawrap_bin.37 metawrap_bin.55 metawrap_bin.73 metawrap_bin.77 Sem_G4_bin.8 Sem_G6_bin.1;
+do
+for j in G1 G3 G4 G6 W1 W2 W5 W6；
+do
+cut -f1,4 /data/yr/data_analysis/prokka/annotation/quant/`${j}/salmon/$`{i}_prokka/quant.sf > /data/yr/virus/host_prokka/`${i}/$`{j}_host.txt;
+done
+done
+
+for i in metawrap_bin.133 metawrap_bin.134 metawrap_bin.15  metawrap_bin.19 metawrap_bin.23 metawrap_bin.37 metawrap_bin.55 metawrap_bin.73 metawrap_bin.77 Sem_G4_bin.8 Sem_G6_bin.1;
+do
+cut -f1,4 /data/yr/data_analysis/prokka/annotation/quant/W6/salmon/`${i}_prokka/quant.sf > /data/yr/virus/host_prokka/$`{i}/W6_host.txt;
+done
+
+for j in G1 G3 G4 G6 W1 W2 W5 W6；
+do
+cut -f1,4 /data/yr/data_analysis/prokka/annotation/quant/`${j}/salmon/metawrap_bin.160_prokka/quant.sf > /data/yr/virus/host_prokka/metawrap_bin.160/$`{j}_host.txt;
+done
+
+cut -f1,4 /data/yr/data_analysis/prokka/annotation/quant/W6/salmon/metawrap_bin.160_prokka/quant.sf > /data/yr/virus/host_prokka/metawrap_bin.160/W6_host.txt;
+
+#### 重新用reseq——virus的新版数据库注释物种
+
+#### 路径/data/yr/virus/virus_contigs/all/virus_tax/mmseq2_new
+
+mkdir -p /data/yr/virus/virus_contigs/all/virus_tax/mmseq2_new
+cd /data/yr/virus/virus_contigs/all/virus_tax/mmseq2_new
+mmseqs easy-taxonomy /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fasta  /data/database/refseq_virus_db_2/mmseq/viral_genome  virus.result tmp
+
+### 找真菌病原菌
+
+### 流程 1. 去除宿主 2，去除细菌来源  3， 比对到真菌基因组， 判断 unique 比对序列， 4， 定量
+
+### 流程 1. 去除宿主(植物根际可以不做)
+
+### 安装bmtagger于coverm的conda环境
+
+conda activate coverm
+
+### 2，去除细菌来源
+
+#### meta-seq已经有kraken2结果，可以直接使用/data/yr/data_analysis/taxonomy/kraken2/classify
+
+mkdir -p /data/yr/fungi/kraken2
+cd /data/yr/fungi/kraken2
+
+### 抓取序列
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+grep "C" /data/yr/data_analysis/taxonomy/kraken2/classify/`${i}.txt > /data/yr/fungi/kraken2/$`{i}_kraken2_C.txt
+done
+
+mkdir -p /data/yr/fungi/kraken2/id
+cd /data/yr/fungi/kraken2/id
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+cut -f2 /data/yr/fungi/kraken2/`${i}_kraken2_C.txt > /data/yr/fungi/kraken2/id/$`{i}_id.txt;
+done
+
+#mkdir /data/yr/fungi/fq_title
+#cd /data/yr/fungi/fq_title
+#for i in G1 G3 G4 G6 W1 W2 W5 W6;
+#do
+#grep "@" /data/yr/data_analysis/trimming/reads/`${i}_R1.fastq > /data/yr/fungi/fq_title/$`{i}_fq_R1_title.txt
+#done
+
+#for i in G1 G3 G4 G6 W1 W2 W5 W6;
+#do
+#grep "@" /data/yr/data_analysis/trimming/reads/`${i}_R2.fastq > /data/yr/fungi/fq_title/$`{i}_fq_R2_title.txt
+#done
+
+##### 可以直接使用
+
+fastx-utils subseq -s 反选C在序列中的补集
+
+G1_kraken2_C.txt
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+fastx-utils subseq -s /data/yr/data_analysis/trimming/reads/`${i}_R1.fastq /data/yr/fungi/kraken2/id/$`{i}_id.txt > /data/yr/fungi/fastq/${i}_U_R1.fastq;
+done
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+fastx-utils subseq -s /data/yr/data_analysis/trimming/reads/`${i}_R2.fastq /data/yr/fungi/kraken2/id/$`{i}_id.txt > /data/yr/fungi/fastq/${i}_U_R2.fastq;
+done
+
+cp /data/database/FON_search_genome/JACRUY000000000.1/JACRUY01.1.fsa_nt/JACRUY01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JACRUY01.1.fa
+
+cp /data/database/FON_search_genome/JACRUX000000000.1/JACRUX01.1.fsa_nt/JACRUX01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JACRUX01.1.fa
+
+cp /data/database/FON_search_genome/JACRUZ000000000.1/JACRUZ01.1.fsa_nt/JACRUZ01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JACRUZ01.1.fa
+
+cp /data/database/FON_search_genome/JAOBTE000000000.1/JAOBTE01.1.fsa_nt/JAOBTE01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JAOBTE01.1.fa
+
+cp /data/database/FON_search_genome/JAOBTF000000000.1/JAOBTF01.1.fsa_nt/JAOBTF01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JAOBTF01.1.fa
+
+cp /data/database/FON_search_genome/JAOBTG000000000.1/JAOBTG01.1.fsa_nt/JAOBTG01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JAOBTG01.1.fa
+
+cp /data/database/FON_search_genome/JAPYLW000000000.1/JAPYLW01.1.fsa_nt/JAPYLW01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JAPYLW01.1.fa
+
+cp /data/database/FON_search_genome/JAPYLX000000000.1/JAPYLX01.1.fsa_nt/JAPYLX01.1.fsa_nt /data/database/FON_search_genome/FON_fasta/JAPYLX01.1.fa
+
+cd /data/database/FON_search_genome/FON_fasta/
+
+##### coverm获得定量和匹配信息
+
+#### coverm contig --bam-file-cache-directory file-cache-directory.bam --coupled /data/yr/data_analysis/trimming/reads/*.fastq --discard-unmapped  --reference /data/yr/virus/virus_contigs/all/virus_tax/selected_end_votu_1.fna -t 180 -m count  -o all_count.tsv
+
+conda activate coverm
+mkdir -p /data/yr/fungi/FON
+cd /data/yr/fungi/FON
+mkdir count tpm
+
+### 以count
+
+cd /data/yr/fungi/FON/count
+coverm genome --bam-file-cache-directory file-cache-directory --coupled /data/yr/fungi/fastq/*.fastq  --genome-fasta-files /data/database/FON_search_genome/FON_fasta/*.fa --min-covered-fraction 0 -t 90 -m count  -o /data/yr/fungi/FON/count/all_count.tsv
+
+### 以tpm
+
+cd /data/yr/fungi/FON/tpm
+coverm genome --bam-file-cache-directory file-cache-directory --coupled /data/yr/fungi/fastq/*.fastq  --genome-fasta-files /data/database/FON_search_genome/FON_fasta/*.fa --min-covered-fraction 0 -t 90 -m tpm  -o /data/yr/fungi/FON/tpm/all_tpm.tsv
+
+for i in G1 G3 G4 G6 W1 W2 W5 W6;
+do
+samtools view -h /data/yr/fungi/FON/count/file-cache-directory/coverm-genome.`${i}_U_R1.fastq.bam > /data/yr/fungi/FON/count/file-cache-directory/$`{i}_U_R1.sam
+done
+
+samtools view -h coverm-genome.G1_U_R1.fastq.bam >G1.sam
+
+#### sam与bam文件的转换
+
+#### bam文件转换为sam文件
+
+samtools view -h coverm-genome.G1_U_R1.fastq.bam >G1.sam
+
+### sam文件转换为bam文件
+
+samtools view -b -S NA12878.sam > NA12878_2.bam
+cp /data/database/FON_search_genome/JACRUY000000000.1/JACRUY01.1.fsa_nt
+
+#### 合并文件ko_map_host.txt于/data/yr/virus
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 2 -s 1 ko_map_host.txt | cut -f1,3 > /data/yr/9_mags_ko/bins/metawrap_bin.160_prokka_family.txt ;
+
+### 运行路径/data/yr/virus/nosignificant
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils annotation -c 2 /data/yr/virus/nosignificant/map.txt /data/yr/virus/nosignificant/ns_ko_map.txt  > /data/yr/virus/nosignificant/ns_ko_map_result.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 1 -s 2 /data/yr/virus/nosignificant/map_link.txt | cut -f1,3 - | sed 's/map//g' - | sed 's/,/;/g' ->  ns_map_link_result.txt
+
+#### 扫描pfam数据库识别votu中的融源，确定给宿主提供amg的是否是融源的
+
+cd /data/yr/virus/PfamScan
+mkdir -p /data/yr/virus/PfamScan/pfam
+cd /data/yr/virus/PfamScan/pfam
+
+conda activate /project/hz/miniconda3
+
+perl /data/yr/virus/PfamScan/pfam_scan.pl -fasta /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.faa -dir /biostack/database/pfam -outfile /data/yr/virus/PfamScan/pfam/virus_pfam.xls -clan_overlap -as -cpu 16 -e_seq 1e-5 -e_dom 1e-5
+conda activate /project/hz/miniconda3
+
+export PERL5LIB="/data/yr/virus/PfamScan:$PERL5LIB"
+
+hmmscan -o /data/yr/virus/hmm_pfam/hmm_pfam.txt --cpu 160 /biostack/database/pfam/Pfam-A.hmm /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.faa
+
+cpan  Bio::Pfam
+
+awk '!/^>/{printf "%s", `$0; n="n"}/^>/{print n $`0; n=""}END{printf "%s", n}' /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.faa > /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/virus.ffn
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/2.txt`;
+do
+grep "${i}" -A 1 /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/virus.ffn >> /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/virus_ORF_host_virs.ffn;
+done
+
+#### 识别温和噬菌体/data/yr/virus/hmm_pfam
+
+### biostack
+
+hmmscan -o /data/yr/virus/hmm_pfam/hmm_pfam.txt --cpu 160 /biostack/database/pfam/Pfam-A.hmm /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.faa
+
+hmmscan  --tblout /data/yr/virus/hmm_pfam/hmm_pfam_tblout.txt --cpu 160 /biostack/database/pfam/Pfam-A.hmm /data/yr/virus/virus_contigs/all/virus_tax/VIBRANT_selected_end_votu_1/selected_end_votu_1.prodigal.faa
+
+PF07508
+PF00589
+PF01609
+PF03184
+PF02914
+PF01797
+PF04986
+PF00665
+PF07825
+PF00239
+PF13009
+PF16795
+PF01526
+PF03400
+PF01610
+PF03050
+PF04693
+PF07592
+PF12762
+PF13359
+PF13586
+PF13610
+PF13612
+PF13701
+PF13737
+PF13751
+PF13808
+PF13843
+PF13358
+
+for i in `cut -f1 /data/yr/virus/hmm_pfam/pfam_temperate.txt`;
+do
+grep "${i}" /data/yr/virus/hmm_pfam/hmm_pfam_tblout.txt >> /data/yr/virus/hmm_pfam/select_pfam_temperate.txt;
+done
+
+#### tpm_metalinks
+
+for i in G1  G3  G4  G6 W1  W2  W5  W6;
+do
+cp /data/meta-links/carbon/`${i}/carbon/sankey/gene.txt /data/meta-links/carbon/phylum/$`{i}_phylum_gene.txt;
+done
+
+rm -r /data/meta-links/carbon/phylum_distribution;
+rm -r /data/meta-links/carbon/phylum_abundance;
+mkdir /data/meta-links/carbon/phylum_distribution;
+mkdir /data/meta-links/carbon/phylum_abundance;
+for i in G1  G3  G4  G6 W1  W2  W5  W6;
+do
+cp /data/meta-links/carbon/`${i}/carbon/distribution/feature.phylum.txt /data/meta-links/carbon/phylum_distribution/$`{i}_phylum_distribution.txt;
+cp /data/meta-links/carbon/`${i}/carbon/abundance/feature.txt /data/meta-links/carbon/phylum_abundance/$`{i}_phylum_abundance.txt;
+done
+
+#### 寻找Proteobacteria和Bacteroidota富集的功能
+
+mkdir /data/yr/virus/bacteria
+
+### 运行路径/data/yr/virus/bacteria
+
+tr "/r" "/n" < G1_ko_map_link_phylum_distribution1.txt >G1_ko_map_link_phylum_distribution2.txt
+sed -i 's/^M//' G1_ko_map_link_phylum_distribution2.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils annotation -c 2 /data/yr/virus/bacteria/pathway1.txt G1_ko_map_link_phylum_distribution2.txt > /data/yr/virus/bacteria/P_and_Bko_map_result.txt
+
+#### 实在不行，直接vim复制
+
+/data/yr/virus/bacteria/P_and_Bko_map_result_re.txt
+sed -i 's/^M//' /data/yr/virus/bacteria/P_and_Bko_map_result_re.txt >P_and_Bko_map_result_re2.txt
+tr "/r" "/n" < P_and_Bko_map_result_re.txt  > P_and_Bko_map_result_re2.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 1 -s 2 /data/yr/virus/bacteria/P_and_Bko_map_result_re.txt | cut -f1,3 - | sed 's/map//g' - | sed 's/,/;/g' ->  /data/yr/virus/bacteria/P_and_Bko_map_link_result.txt
+
+### 嫁接富集ko
+
+mkdir /data/yr/virus/bacteria/ko
+
+#### 查看换行符
+
+cat -A /data/yr/virus/bacteria/ko/P_B_enrich.txt
+
+### 整理map-ko，路径/data/yr/virus/bacteria/ko
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils annotation -c 2 /data/yr/virus/bacteria/ko/Proteobacteria_ko.txt map_ko.txt > /data/yr/virus/bacteria/ko/P_map_ko_result.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils annotation -c 2 /data/yr/virus/bacteria/ko/Bacteroidota_ko.txt map_ko.txt > /data/yr/virus/bacteria/ko/B_map_ko_result.txt
+
+#### 重新安装crisprcasfinder
+
+#使用conda安装
+conda env create -f ccf.environment.yml -n crisprcasfinder
+conda activate crisprcasfinder
+mamba init
+mamba activate
+mamba install -c bioconda macsyfinder=2.0
+macsydata install -u CASFinder==3.1.0
+
+#### 安装位置/project/hz/CRISPRCasFinder-master
+
+perl /project/hz/CRISPRCasFinder-master/CRISPRCasFinder.pl -in install_test/sequence.fasta -cas -keep
+
+#### 提取amg序列，为了第三次的分析联系病毒amg与病毒的关系
+
+mkdir /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm
+cd /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/G1_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/G1_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/G3_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/G3_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/G4_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/G4_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/G6_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/G6_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/W1_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/W1_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/W2_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/W2_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/W5_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/W5_amg_tpm.txt;
+done
+
+for i in `cut -f1 /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/vcontigs_amg.txt`;
+do
+grep "${i}" /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/tpm/W6_tpm.txt >> /data/yr/virus/virus_contigs/all/virus_tax/all_orf_quant/salmon_result/amg_tpm/W6_amg_tpm.txt;
+done
+
+#### 计算93个基因组的丰度
+
+### 以count
+
+cd /data/yr/data_analysis/coverm/counts
+nohup coverm genome --coupled /data/yr/data_analysis/trimming/reads/*.fastq  --genome-fasta-files /data/yr/data_analysis/93/*.fa --min-covered-fraction 0 -t 90 -m count  -o /data/yr/data_analysis/coverm/counts/all_count.tsv &
+
+### 以tpm
+
+cd /data/yr/data_analysis/coverm/tpm
+nohup coverm genome --coupled /data/yr/data_analysis/trimming/reads/*.fastq  --genome-fasta-files /data/yr/data_analysis/93/*.fa --min-covered-fraction 0 -t 90 -m tpm  -o /data/yr/data_analysis/coverm/tpm/all_tpm.tsv &
+mmseqmmseq
+/data/yr/data_analysis/93
+
+### 运行路径/data/yr/virus/ungrafted
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils annotation -c 2 /data/yr/virus/nosignificant/map.txt /data/yr/virus/nosignificant/ns_ko_map.txt  > /data/yr/virus/ungrafted/ungrafted_ko_map_result.txt
+
+/biostack/tools/protocols/meta-links-0.0.5/binaries/tsv-utils bins -t 1 -s 2 /data/yr/virus/nosignificant/map_link.txt | cut -f1,3 - | sed 's/map//g' - | sed 's/,/;/g' ->  ns_map_link_result.txt
+
+
+### 统计病毒vcontigs分箱以后所得的vMAGs
+
+for i in G1  G3  G4  G6 W1  W2  W5  W6;
+do
+ls  /data/yr/virus/virus_contigs/`${i}/vRhyme_$`{i}/output/vRhyme_best_bins_fasta/*.ffn  | wc -l >> /data/yr/virus/virus_contigs/tongji_bins.txt;
+done
